@@ -1,20 +1,13 @@
-# holds Spotify login logic
-
-# auth.py
-
-import spotipy
+from dotenv import load_dotenv
+import os
 from spotipy.oauth2 import SpotifyOAuth
-from config import (
-    SPOTIPY_CLIENT_ID,
-    SPOTIPY_CLIENT_SECRET,
-    SPOTIPY_REDIRECT_URI,
-    SCOPE
-)
+
+load_dotenv()
 
 def create_spotify_oauth():
     return SpotifyOAuth(
-        client_id=SPOTIPY_CLIENT_ID,
-        client_secret=SPOTIPY_CLIENT_SECRET,
-        redirect_uri=SPOTIPY_REDIRECT_URI,
-        scope=SCOPE
+        client_id=os.getenv("SPOTIPY_CLIENT_ID"),
+        client_secret=os.getenv("SPOTIPY_CLIENT_SECRET"),
+        redirect_uri=os.getenv("SPOTIPY_REDIRECT_URI"),
+        scope="playlist-read-private playlist-modify-private playlist-modify-public"
     )
