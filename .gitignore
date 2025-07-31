@@ -15,4 +15,7 @@ venv/
 # Google Client Secret
 client_secret.json
 
+# Flask Session
+flask_session/
+
 
