@@ -6,6 +6,7 @@ from flask import request, session, redirect
 from dotenv import load_dotenv
 from spotify_client import get_playlist_tracks
 from google.oauth2.credentials import Credentials
+import isodate
 
 
 load_dotenv()
@@ -77,13 +78,38 @@ def create_youtube_playlist(name, description="Imported from Spotify"):
 
     return playlist.get("id")
 
-def search_and_add_video(youtube, playlist_id, track_name):
+def parse_iso8601_duration(duration_str):
+    duration = isodate.parse_duration(duration_str)
+    return int(duration.total_seconds())
+
+def search_and_add_video(youtube, playlist_id, track_name, artist_name):
+    search_query = f"{track_name} {artist_name} official audio".strip()
+
     search = youtube.search().list(
-        part="snippet", q=track_name, maxResults=1, type="video"
+        part="snippet",
+        q=search_query,
+        maxResults=5,
+        type="video"
     ).execute()
 
-    if search["items"]:
-        video_id = search["items"][0]["id"]["videoId"]
+    for item in search["items"]:
+        video_id = item["id"]["videoId"]
+
+        details = youtube.videos().list(
+            part="contentDetails",
+            id=video_id
+        ).execute()
+
+        if not details["items"]:
+            continue
+
+        content = details["items"][0]["contentDetails"]
+        duration = content["duration"]
+        seconds = parse_iso8601_duration(duration)
+
+        if seconds < 60:
+            continue
+
         youtube.playlistItems().insert(
             part="snippet",
             body={
@@ -97,7 +123,9 @@ def search_and_add_video(youtube, playlist_id, track_name):
             }
         ).execute()
         return True
+
     return False
+
 
 
 def copy_spotify_to_youtube(spotify_playlist_id, new_name="Imported from Spotify"):
@@ -115,11 +143,24 @@ def copy_spotify_to_youtube(spotify_playlist_id, new_name="Imported from Spotify
     if not yt_playlist_id:
         return "Failed to create YouTube playlist.", None
 
-    # Add tracks
     added = 0
     for track in tracks:
-        success = search_and_add_video(youtube, yt_playlist_id, track)
+        # If track is a string (e.g. just the track name)
+        if isinstance(track, str):
+            track_name = track
+            artist_name = ""
+        else:
+            # Track is a full object — extract properly
+            try:
+                track_name = track["track"]["name"]
+                artist_name = track["track"]["artists"][0]["name"]
+            except (KeyError, TypeError, IndexError):
+                continue
+
+        success = search_and_add_video(youtube, yt_playlist_id, track_name, artist_name)
         if success:
             added += 1
 
     return f"{added} tracks added to YouTube playlist.", None
+
+

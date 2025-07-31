@@ -3,6 +3,7 @@ from flask import Blueprint, request
 from spotify_client import get_user_playlists, get_playlist_tracks, copy_playlist
 from flask import Flask, redirect, session, request, url_for
 from auth import create_spotify_oauth
+from spotify_client import copy_youtube_to_spotify
 
 spotify_bp = Blueprint("spotify", __name__)
 
@@ -43,6 +44,15 @@ def copy_playlist_route():
     source_input = request.args.get('source_id')
     new_name = request.args.get('name', 'Copied Playlist')
     return copy_playlist(source_input, new_name)
+
+@spotify_bp.route("/youtube_to_spotify", methods=["GET"])
+def youtube_to_spotify():
+    source_id = request.args.get("source_id")
+    name = request.args.get("name", "Imported from YouTube")
+    result, redirect = copy_youtube_to_spotify(source_id, name)
+    if redirect:
+        return redirect
+    return result
 
 @spotify_bp.route('/logout')
 def logout():

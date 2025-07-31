@@ -4,6 +4,8 @@ from flask import session, redirect
 from spotipy.exceptions import SpotifyException
 from auth import create_spotify_oauth
 
+
+
 def get_valid_spotify_client():
     sp_oauth = create_spotify_oauth()
     token_info = session.get('token_info')
@@ -88,3 +90,82 @@ def copy_playlist(source_input, new_name='Copied Playlist'):
     except Exception:
         return 'Failed to create or populate new playlist.'
 
+def get_youtube_playlist_tracks(youtube, playlist_id):
+    tracks = []
+    request = youtube.playlistItems().list(
+        part="snippet",
+        maxResults=50,
+        playlistId=playlist_id
+    )
+
+    while request:
+        response = request.execute()
+        for item in response["items"]:
+            title = item["snippet"]["title"]
+            channel = item["snippet"].get("videoOwnerChannelTitle", "")
+            tracks.append({"title": title, "channel": channel})
+        request = youtube.playlistItems().list_next(request, response)
+
+    return tracks
+
+def parse_youtube_title(title):
+    # Remove any parenthetical content
+    title = re.sub(r"\([^)]*\)", "", title)
+    title = re.sub(r"\[[^\]]*\]", "", title)
+    title = title.replace("official video", "")
+    title = title.replace("official audio", "")
+    title = title.replace("HQ", "")
+    title = title.replace("HD", "")
+    title = title.strip()
+
+    if "-" in title:
+        artist, track = title.split("-", 1)
+        return artist.strip(), track.strip()
+
+    return "", title.strip()
+
+def search_spotify_track(sp, artist, track):
+    query = f"{track} {artist}".strip()
+    result = sp.search(q=query, type="track", limit=1)
+    items = result.get("tracks", {}).get("items", [])
+    if items:
+        return items[0]["uri"]
+    return None
+
+def copy_youtube_to_spotify(yt_playlist_id, new_name="Imported from YouTube"):
+    from youtube_client import get_authenticated_youtube_client
+    sp, redirect_response = get_valid_spotify_client()
+    if redirect_response or sp is None:
+        return redirect_response or redirect('/login')
+    youtube, redirect_resp = get_authenticated_youtube_client()
+    if redirect_resp:
+        return None, redirect_resp
+
+    # Get YouTube tracks
+    yt_tracks = get_youtube_playlist_tracks(youtube, yt_playlist_id)
+    if not yt_tracks:
+        return "Failed to fetch YouTube playlist.", None
+
+    # Search Spotify
+    uris = []
+    for yt_track in yt_tracks:
+        artist, track = parse_youtube_title(yt_track["title"])
+        print("YouTube Title:", yt_track["title"])
+        print("Parsed as:", f"{artist} - {track}")
+        if not track:
+            print("Skipping: no track name parsed.\n")
+            continue
+        uri = search_spotify_track(sp, artist, track)
+        if uri:
+            print("Match found:", uri)
+            uris.append(uri)
+
+    if not uris:
+        return "No matching Spotify tracks found.", None
+
+    # Create Spotify playlist & add tracks
+    user_id = sp.me()["id"]
+    playlist = sp.user_playlist_create(user=user_id, name=new_name, public=False)
+    sp.playlist_add_items(playlist_id=playlist["id"], items=uris)
+
+    return f"{len(uris)} tracks added to Spotify.", None
