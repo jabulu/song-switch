@@ -8,10 +8,16 @@ from spotipy.exceptions import SpotifyException
 import re 
 import os
 from dotenv import load_dotenv
+from flask_session import Session
 
 load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY")
+
+app.config["SESSION_TYPE"] = "filesystem"
+app.config["SESSION_PERMANENT"] = False
+Session(app)
+
 app.register_blueprint(youtube_bp)
 app.register_blueprint(spotify_bp)
 
